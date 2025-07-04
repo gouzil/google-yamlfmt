@@ -1,0 +1,39 @@
+# Test YAML file for yamlfmt testing
+name: test-project
+version: 1.0.0
+description: A test project for validating yamlfmt functionality
+# Dependencies section with poor formatting
+dependencies:
+  - pytest>=6.0
+  - black>=22.0
+  - ruff>=0.1.0
+# Configuration with inconsistent indentation
+config:
+  debug: true
+  log_level: info
+  timeout: 30
+  max_retries: 3
+# List with inconsistent formatting
+scripts:
+  - build
+  - test
+  - format
+  - lint
+# Nested structure
+database:
+  host: localhost
+  port: 5432
+  credentials:
+    username: admin
+    password: secret123
+    database: test_db
+# Array of objects
+servers:
+  - name: web-1
+    ip: 192.168.1.10
+    ports:
+      - 80
+      - 443
+  - name: web-2
+    ip: 192.168.1.11
+    ports: [8080, 8443]
