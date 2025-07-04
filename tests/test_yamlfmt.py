@@ -44,6 +44,7 @@ list:
         # Test version output with different possible flags
         version_flags = ["-version", "--version", "-V"]
         success = False
+        last_error = None
 
         for flag in version_flags:
             try:
@@ -57,7 +58,8 @@ list:
                 if result.returncode == 0:
                     success = True
                     break
-            except subprocess.TimeoutExpired:
+            except subprocess.TimeoutExpired as e:
+                last_error = e
                 continue
 
         # If version flags don't work, try help flag as fallback
@@ -71,14 +73,10 @@ list:
                     check=False,
                 )
                 success = result.returncode == 0
-            except subprocess.TimeoutExpired:
-                pass
+            except subprocess.TimeoutExpired as e:
+                last_error = e
 
-        # If yamlfmt binary is not available (development mode), skip this test
-        if not success:
-            self.skipTest("yamlfmt binary not available in development mode")
-
-        self.assertTrue(success, "yamlfmt should respond to at least one version or help flag")
+        self.assertTrue(success, f"yamlfmt should respond to at least one version or help flag. Last error: {last_error}")
 
     def test_yamlfmt_format_basic(self):
         """Test basic YAML formatting functionality."""
@@ -96,10 +94,6 @@ list:
                 check=False,
             )
 
-            # If yamlfmt binary is not available (development mode), skip this test
-            if result.returncode != 0 and ("No such file or directory" in result.stderr or "FileNotFoundError" in result.stderr):
-                self.skipTest("yamlfmt binary not available in development mode")
-
             self.assertEqual(result.returncode, 0, f"yamlfmt formatting failed: {result.stderr}")
 
             # Check that the formatted file still exists
@@ -114,6 +108,7 @@ list:
         """Test that yamlfmt can show help information."""
         help_flags = ["-h", "--help"]
         success = False
+        last_error = None
 
         for flag in help_flags:
             try:
@@ -127,14 +122,11 @@ list:
                 if result.returncode == 0 and ("yamlfmt" in result.stdout.lower() or "usage" in result.stdout.lower()):
                     success = True
                     break
-            except subprocess.TimeoutExpired:
+            except subprocess.TimeoutExpired as e:
+                last_error = e
                 continue
 
-        # If yamlfmt binary is not available (development mode), skip this test
-        if not success:
-            self.skipTest("yamlfmt binary not available in development mode")
-
-        self.assertTrue(success, "yamlfmt should show help information")
+        self.assertTrue(success, f"yamlfmt should show help information. Last error: {last_error}")
 
     def test_module_import(self):
         """Test that the yamlfmt module can be imported correctly."""

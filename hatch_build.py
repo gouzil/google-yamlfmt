@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import platform
 import re
 import shutil
 import tarfile
@@ -23,6 +24,16 @@ BUILD_TARGET = {
     ("win", "arm64"): {"download_file": ("windows", "arm64")},
 }
 
+# 运行时平台到下载目标的映射（用于开发环境）
+RUNTIME_PLATFORM_MAP = {
+    ("Linux", "x86_64"): ("linux", "x86_64"),
+    ("Linux", "aarch64"): ("linux", "arm64"),
+    ("Darwin", "x86_64"): ("darwin", "x86_64"),
+    ("Darwin", "arm64"): ("darwin", "arm64"),
+    ("Windows", "AMD64"): ("windows", "x86_64"),
+    ("Windows", "ARM64"): ("windows", "arm64"),
+}
+
 
 class SpecialBuildHook(BuildHookInterface):
     BIN_NAME = "yamlfmt"
@@ -33,30 +44,39 @@ class SpecialBuildHook(BuildHookInterface):
         self.temp_dir = Path(tempfile.mkdtemp())
 
     def initialize(self, version: str, build_data: dict[str, Any]) -> None:
-        # 仅在构建 Wheel 文件时执行此逻辑
-        if self.target_name != "wheel":
+        # 执行此逻辑用于 wheel 构建和 editable 安装
+        if self.target_name not in ["wheel", "editable"]:
             return
 
         target_arch = os.environ.get("CIBW_ARCHS", None)
         target_os_info = os.environ.get("CIBW_PLATFORM", None)
 
-        # 如果未设置 CIBW 环境变量，则跳过二进制构建（开发模式）
-        if target_arch is None or target_os_info is None:
-            return
-
-        if (target_os_info, target_arch) not in BUILD_TARGET:
-            raise ValueError(f"Unsupported target: {target_os_info}, {target_arch}")
-
-        # 构建完整的 Wheel 标签
-        full_wheel_tag = f"py3-none-{target_os_info}_{target_arch}"
-        build_data["tag"] = full_wheel_tag
+        # 如果设置了 CIBW 环境变量，使用它们（CI/CD 环境）
+        if target_arch is not None and target_os_info is not None:
+            if (target_os_info, target_arch) not in BUILD_TARGET:
+                raise ValueError(f"Unsupported target: {target_os_info}, {target_arch}")
+            
+            download_target = BUILD_TARGET[(target_os_info, target_arch)]["download_file"]
+            # 构建完整的 Wheel 标签（仅对 wheel 构建）
+            if self.target_name == "wheel":
+                full_wheel_tag = f"py3-none-{target_os_info}_{target_arch}"
+                build_data["tag"] = full_wheel_tag
+        else:
+            # 开发环境：根据当前运行时平台自动检测
+            current_system = platform.system()
+            current_machine = platform.machine()
+            
+            if (current_system, current_machine) not in RUNTIME_PLATFORM_MAP:
+                raise ValueError(f"Unsupported runtime platform: {current_system}, {current_machine}")
+            
+            download_target = RUNTIME_PLATFORM_MAP[(current_system, current_machine)]
 
         # 下载 yamlfmt 可执行文件
-        tar_gz_file = self.download_yamlfmt(target_os_info, target_arch)
+        tar_gz_file = self.download_yamlfmt(download_target[0], download_target[1])
 
         # 解压缩文件
         with tarfile.open(tar_gz_file, "r:gz") as tar:
-            if target_os_info == "win":
+            if download_target[0] == "windows":
                 # Windows 上的文件名是 yamlfmt.exe
                 assert f"{self.BIN_NAME}.exe" in tar.getnames()
                 tar.extract(f"{self.BIN_NAME}.exe", path=self.temp_dir)
@@ -71,17 +91,16 @@ class SpecialBuildHook(BuildHookInterface):
         assert bin_path.is_file(), f"{self.BIN_NAME} not found"
         build_data["force_include"][f"{bin_path.resolve()}"] = f"yamlfmt/{self.BIN_NAME}"
 
-    def download_yamlfmt(self, target_os_info: str, target_arch: str) -> None:
+    def download_yamlfmt(self, target_os: str, target_arch: str) -> None:
         """Download the yamlfmt binary for the specified OS and architecture."""
-        download_target = BUILD_TARGET[(target_os_info, target_arch)]["download_file"]
-        file_path = self.temp_dir / f"{self.BIN_NAME}_{download_target[0]}_{download_target[1]}.tar.gz"
+        file_path = self.temp_dir / f"{self.BIN_NAME}_{target_os}_{target_arch}.tar.gz"
         request.urlretrieve(
             self.YAMLFMT_REPO.format(
                 version=re.sub(
                     r"(?:a|b|rc)\d+|\.post\d+|\.dev\d+$", "", self.metadata.version
                 ),  # 去掉版本号中的后缀, alpha/beta/rc/post/dev
-                target_os_info=download_target[0],
-                target_arch=download_target[1],
+                target_os_info=target_os,
+                target_arch=target_arch,
             ),
             file_path,
         )
