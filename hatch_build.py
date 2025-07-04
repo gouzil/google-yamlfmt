@@ -40,8 +40,9 @@ class SpecialBuildHook(BuildHookInterface):
         target_arch = os.environ.get("CIBW_ARCHS", None)
         target_os_info = os.environ.get("CIBW_PLATFORM", None)
 
-        assert target_arch is not None, f"CIBW_ARCHS not set see: {BUILD_TARGET}"
-        assert target_os_info is not None, f"CIBW_PLATFORM not set see: {BUILD_TARGET}"
+        # 如果未设置 CIBW 环境变量，则跳过二进制构建（开发模式）
+        if target_arch is None or target_os_info is None:
+            return
 
         if (target_os_info, target_arch) not in BUILD_TARGET:
             raise ValueError(f"Unsupported target: {target_os_info}, {target_arch}")
